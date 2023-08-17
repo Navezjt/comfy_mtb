@@ -2,17 +2,16 @@
 import onnxruntime
 from pathlib import Path
 from PIL import Image
-from typing import List, Set, Tuple, Union, Optional
+from typing import List, Set, Union, Optional
 import cv2
 import folder_paths
 import glob
 import insightface
 import numpy as np
 import os
-import tempfile
 import torch
 from insightface.model_zoo.inswapper import INSwapper
-from ..utils import pil2tensor, tensor2pil
+from ..utils import pil2tensor, tensor2pil, download_antelopev2
 from ..log import mklog, NullWriter
 import sys
 import comfy.model_management as model_management
@@ -53,6 +52,9 @@ class LoadFaceAnalysisModel:
     CATEGORY = "mtb/facetools"
 
     def load_model(self, faceswap_model: str):
+        if faceswap_model == "antelopev2":
+            download_antelopev2()
+
         face_analyser = insightface.app.FaceAnalysis(
             name=faceswap_model,
             root=os.path.join(folder_paths.models_dir, "insightface"),
@@ -120,7 +122,6 @@ class FaceSwap:
                 "faces_index": ("STRING", {"default": "0"}),
                 "faceanalysis_model": ("FACE_ANALYSIS_MODEL", {"default": "None"}),
                 "faceswap_model": ("FACESWAP_MODEL", {"default": "None"}),
-                "debug": ("BOOL", {"default": False}),
             },
             "optional": {},
         }
@@ -136,7 +137,6 @@ class FaceSwap:
         faces_index: str,
         faceanalysis_model,
         faceswap_model,
-        debug=False,
     ):
         def do_swap(img):
             model_management.throw_exception_if_processing_interrupted()
