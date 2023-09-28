@@ -7,13 +7,22 @@
  *
  */
 
-import { app } from '/scripts/app.js'
-import * as shared from '/extensions/mtb/comfy_shared.js'
-import { log } from '/extensions/mtb/comfy_shared.js'
-import { MtbWidgets } from '/extensions/mtb/mtb_widgets.js'
+import { app } from '../../scripts/app.js'
+
+import * as shared from './comfy_shared.js'
+import { log } from './comfy_shared.js'
+import { MtbWidgets } from './mtb_widgets.js'
 
 // TODO: respect inputs order...
 
+function escapeHtml(unsafe) {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
 app.registerExtension({
   name: 'mtb.Debug',
   async beforeRegisterNodeDef(nodeType, nodeData, app) {
@@ -65,7 +74,7 @@ app.registerExtension({
         if (message.text) {
           for (const txt of message.text) {
             const w = this.addCustomWidget(
-              MtbWidgets.DEBUG_STRING(`${prefix}_${widgetI}`, txt)
+              MtbWidgets.DEBUG_STRING(`${prefix}_${widgetI}`, escapeHtml(txt))
             )
             w.parent = this
             widgetI++
@@ -81,8 +90,9 @@ app.registerExtension({
           }
           // this.onResize?.(this.size);
           // this.resize?.(this.size)
-          this.setSize(this.computeSize())
         }
+
+        this.setSize(this.computeSize())
 
         this.onRemoved = function () {
           // When removing this node we need to remove the input from the DOM

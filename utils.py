@@ -1,19 +1,22 @@
-from PIL import Image
-import numpy as np
-import torch
-from pathlib import Path
-import sys
-from typing import List
-import signal
-from contextlib import suppress
-from queue import Queue, Empty
-import subprocess
-import threading
-import os
-import math
 import functools
+import math
+import os
+import shutil
+import signal
 import socket
+import subprocess
+import sys
+import threading
+import uuid
+from contextlib import suppress
+from pathlib import Path
+from queue import Empty, Queue
+from typing import List, Optional, Union
+
+import numpy as np
 import requests
+import torch
+from PIL import Image
 
 try:
     from .log import log
@@ -29,6 +32,17 @@ except ImportError:
         log.warn("[comfy mtb] You probably called the file outside a module.")
 
 
+# region SANITY_CHECK Utilities
+
+
+def make_report():
+    pass
+
+
+# endregion
+
+
+# region SERVER Utilities
 class IPChecker:
     def __init__(self):
         self.ips = list(self.get_local_ips())
@@ -63,7 +77,6 @@ class IPChecker:
             return False
 
 
-# region MISC Utilities
 @functools.lru_cache(maxsize=1)
 def get_server_info():
     from comfy.cli_args import args
@@ -75,6 +88,37 @@ def get_server_info():
         base_url = ip_checker.get_working_ip(f"http://{{}}:{args.port}/history")
         log.debug(f"Setting ip to {base_url}")
     return (base_url, args.port)
+
+
+# endregion
+
+
+# region MISC Utilities
+def backup_file(
+    fp: Path,
+    target: Optional[Path] = None,
+    backup_dir: str = ".bak",
+    suffix: Optional[str] = None,
+    prefix: Optional[str] = None,
+):
+    if not fp.exists():
+        raise FileNotFoundError(f"No file found at {fp}")
+
+    backup_directory = target or fp.parent / backup_dir
+    backup_directory.mkdir(parents=True, exist_ok=True)
+
+    stem = fp.stem
+
+    if suffix or prefix:
+        new_stem = f"{prefix or ''}{stem}{suffix or ''}"
+    else:
+        new_stem = f"{stem}_{uuid.uuid4()}"
+
+    backup_file_path = backup_directory / f"{new_stem}{fp.suffix}"
+
+    # Perform the backup
+    shutil.copy(fp, backup_file_path)
+    log.debug(f"File backed up to {backup_file_path}")
 
 
 def hex_to_rgb(hex_color):
@@ -181,6 +225,7 @@ reqs_map = {
     "basicsr": "basicsr==1.4.2",
     "rembg": "rembg==2.0.50",
     "qrcode": "qrcode[pil]",
+    "requirements": "requirements-parser==0.5.0",
 }
 
 
@@ -213,10 +258,12 @@ elif ".venv" in sys.executable:
     comfy_mode = "venv"
 
 # - Get the absolute path of the parent directory of the current script
-here = Path(__file__).parent.resolve()
+here = Path(__file__).parent.absolute()
 
 # - Construct the absolute path to the ComfyUI directory
 comfy_dir = here.parent.parent
+
+styles_dir = comfy_dir / "styles"
 
 # - Construct the path to the font file
 font_path = here / "font.ttf"
@@ -243,7 +290,7 @@ PIL_FILTER_MAP = {
 # endregion
 
 
-# region TENSOR UTILITIES
+# region TENSOR Utilities
 def tensor2pil(image: torch.Tensor) -> List[Image.Image]:
     batch_count = image.size(0) if len(image.shape) > 3 else 1
     if batch_count > 1:
@@ -259,14 +306,14 @@ def tensor2pil(image: torch.Tensor) -> List[Image.Image]:
     ]
 
 
-def pil2tensor(image: Image.Image | List[Image.Image]) -> torch.Tensor:
+def pil2tensor(image: Union[Image.Image, List[Image.Image]]) -> torch.Tensor:
     if isinstance(image, list):
         return torch.cat([pil2tensor(img) for img in image], dim=0)
 
     return torch.from_numpy(np.array(image).astype(np.float32) / 255.0).unsqueeze(0)
 
 
-def np2tensor(img_np: np.ndarray | List[np.ndarray]) -> torch.Tensor:
+def np2tensor(img_np: Union[np.ndarray, List[np.ndarray]]) -> torch.Tensor:
     if isinstance(img_np, list):
         return torch.cat([np2tensor(img) for img in img_np], dim=0)
 
@@ -292,9 +339,8 @@ def download_antelopev2():
     antelopev2_url = "https://drive.google.com/uc?id=18wEUfMNohBJ4K3Ly5wpTejPfDzp-8fI8"
 
     try:
-        import gdown
-
         import folder_paths
+        import gdown
 
         log.debug("Loading antelopev2 model")
 
